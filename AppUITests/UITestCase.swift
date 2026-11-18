@@ -45,7 +45,16 @@ class UITestCase: XCTestCase {
         if element.elementType == .window { app.activate() }
         XCTAssertTrue(element.waitForExistence(timeout: 5), "캡처 대상이 없습니다: \(name)")
         RunLoop.current.run(until: Date().addingTimeInterval(1.0))
-        let attachment = XCTAttachment(screenshot: element.screenshot())
+        // 창과 메뉴바 팝오버는 모서리가 둥글어 바깥에 다른 앱 화면이 비친다. 그 부분을 지워서 첨부한다.
+        guard let png = WindowScreenshot.maskedPNG(element.screenshot(), pointWidth: element.frame.width) else {
+            XCTFail("스크린샷 모서리를 지우지 못했습니다: \(name)")
+            return
+        }
+        XCTAssertTrue(
+            WindowScreenshot.cornersAreTransparent(png, pointWidth: element.frame.width),
+            "스크린샷 모서리가 지워지지 않았습니다: \(name)"
+        )
+        let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
