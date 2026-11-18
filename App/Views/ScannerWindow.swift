@@ -27,7 +27,9 @@ private struct ScannerDetailView: View {
         switch section {
         case .junk:
             JunkListView()
-        case .simulators, .history:
+        case .history:
+            HistoryView()
+        case .simulators:
             placeholder
         }
     }

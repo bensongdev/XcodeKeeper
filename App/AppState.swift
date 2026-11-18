@@ -32,17 +32,24 @@ enum ScannerSection: String, CaseIterable, Identifiable, Sendable {
 final class AppState {
     private let diskSpace: any DiskSpaceProviding
     private let scanner: JunkScanner
+    let cleanup: CleanupServices
     private var scanTask: Task<Void, Never>?
+    /// 정리 실행 Task(AppState+Cleanup.swift에서 관리).
+    var cleanupTask: Task<Void, Never>?
 
     var selectedSection: ScannerSection? = .junk
     private(set) var availableBytes: Int64?
     var scanResults: ScanResults
     private(set) var lastScanDate: Date?
+    var cleanupPhase: CleanupPhase = .idle
+    var history: [CleanupRecord]
 
-    init(diskSpace: any DiskSpaceProviding, scanner: JunkScanner) {
+    init(diskSpace: any DiskSpaceProviding, scanner: JunkScanner, cleanup: CleanupServices) {
         self.diskSpace = diskSpace
         self.scanner = scanner
+        self.cleanup = cleanup
         self.scanResults = ScanResults(targets: scanner.targets)
+        self.history = cleanup.history.load()
         refreshDiskSpace()
     }
 
@@ -89,30 +96,57 @@ struct LaunchConfiguration: Sendable {
     /// UI 테스트에서 쓰는 고정 여유 공간(16.2GB).
     static let uiTestAvailableBytes: Int64 = 16_200_000_000
 
+    static let xcodeRunningKey = "UITestXcodeRunning"
+    static let cleanupFailureKey = "UITestCleanupFailure"
+
     let isUITest: Bool
     /// UI 테스트에서 시작 시 열 창: "scanner" 또는 "settings".
     let windowToOpen: String?
+    /// UI 테스트: Xcode가 실행 중인 것처럼 한다.
+    var simulatesXcodeRunning = false
+    /// UI 테스트: 정리 중 일부 항목이 실패하게 한다.
+    var simulatesCleanupFailure = false
 
     static func current(_ defaults: UserDefaults = .standard) -> LaunchConfiguration {
         let isUITest = defaults.bool(forKey: uiTestModeKey)
         return LaunchConfiguration(
             isUITest: isUITest,
-            windowToOpen: isUITest ? defaults.string(forKey: openWindowKey) : nil
+            windowToOpen: isUITest ? defaults.string(forKey: openWindowKey) : nil,
+            simulatesXcodeRunning: isUITest && defaults.bool(forKey: xcodeRunningKey),
+            simulatesCleanupFailure: isUITest && defaults.bool(forKey: cleanupFailureKey)
         )
     }
 
     @MainActor
     func makeAppState() -> AppState {
         if isUITest {
-            // 실제 디스크나 명령을 건드리지 않는 가짜 대상을 쓴다.
+            // 실제 디스크·명령·휴지통·이력 파일을 건드리지 않는 가짜를 쓴다.
             return AppState(
                 diskSpace: FixedDiskSpaceProvider(bytes: Self.uiTestAvailableBytes),
-                scanner: JunkScanner(targets: UITestFixtures.targets, environment: UITestFixtures.environment)
+                scanner: JunkScanner(targets: UITestFixtures.targets, environment: UITestFixtures.environment),
+                cleanup: CleanupServices(
+                    cleaner: UITestFixtures.FakeCleaner(failsTargetID: simulatesCleanupFailure ? "homebrewCache" : nil),
+                    history: InMemoryHistoryStore(),
+                    xcode: FixedXcodeChecker(isRunning: simulatesXcodeRunning)
+                )
             )
         }
+        let environment = ScanEnvironment.live()
         return AppState(
             diskSpace: VolumeDiskSpaceProvider(),
-            scanner: JunkScanner(targets: BuiltinTargets.all, environment: .live())
+            scanner: JunkScanner(targets: BuiltinTargets.all, environment: environment),
+            cleanup: CleanupServices(
+                cleaner: Cleaner(environment: environment, trash: SystemTrash()),
+                history: FileHistoryStore.live(),
+                xcode: SystemXcodeChecker()
+            )
         )
     }
+}
+
+/// 정리에 쓰는 서비스 묶음.
+struct CleanupServices: Sendable {
+    let cleaner: any Cleaning
+    let history: any HistoryStoring
+    let xcode: any XcodeRunningChecking
 }

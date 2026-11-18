@@ -98,7 +98,7 @@ final class AppStateScanTests: XCTestCase {
     private func makeState(_ targets: [CleanupTarget]) -> AppState {
         AppState(
             diskSpace: FixedDiskSpaceProvider(bytes: 1),
-            scanner: makeScanner(targets)
+            scanner: makeScanner(targets), cleanup: makeCleanupServices()
         )
     }
 

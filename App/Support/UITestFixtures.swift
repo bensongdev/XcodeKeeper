@@ -18,9 +18,47 @@ enum UITestFixtures {
             method: target.method, hideWhenEmpty: target.hideWhenEmpty,
             locate: { _ in
                 if let delay { try await Task.sleep(for: delay) }
-                return items
+                let removed = cleanedItemIDs.snapshot
+                return items.filter { !removed.contains($0.id) }
             }
         )
+    }
+
+    /// 가짜 정리기가 "정리한" 항목 id. 다시 스캔하면 이 항목들은 나오지 않는다.
+    static let cleanedItemIDs = LockedSet()
+
+    final class LockedSet: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: Set<String> = []
+        var snapshot: Set<String> { lock.withLock { values } }
+        func insert(_ value: String) { _ = lock.withLock { values.insert(value) } }
+    }
+
+    /// 디스크·휴지통·명령을 건드리지 않는 가짜 정리기. `failsTargetID` 대상은 "허용되지 않은 경로"로 실패한다.
+    struct FakeCleaner: Cleaning {
+        let failsTargetID: String?
+
+        func clean(_ selections: [CleanupSelection]) async -> CleanupOutcome {
+            try? await Task.sleep(for: .milliseconds(300))
+            var outcome = CleanupOutcome()
+            for selection in selections {
+                for item in selection.items {
+                    if selection.target.id == failsTargetID {
+                        outcome.failures.append(CleanupFailure(
+                            targetTitle: selection.target.title, itemName: item.name,
+                            reason: Cleaner.reason(for: .outsideAllowedRoots)
+                        ))
+                        continue
+                    }
+                    cleanedItemIDs.insert(item.id)
+                    outcome.cleaned.append(CleanedItem(
+                        targetID: selection.target.id, targetTitle: selection.target.title,
+                        itemName: item.name, bytes: item.bytes
+                    ))
+                }
+            }
+            return outcome
+        }
     }
 
     private static func item(_ path: String, _ name: String, _ bytes: Int64, daysAgo: Double) -> ScanItem {

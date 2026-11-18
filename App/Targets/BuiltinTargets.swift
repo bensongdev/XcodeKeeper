@@ -17,6 +17,7 @@ enum BuiltinTargets {
             """),
         safety: .safe,
         method: .trash,
+        allowedRoots: { env in [env.url("Library/Developer/Xcode/DerivedData")] },
         locate: { env in
             try env.childItems(of: env.url("Library/Developer/Xcode/DerivedData")) {
                 projectName(fromDerivedDataFolder: $0.lastPathComponent)
@@ -33,6 +34,7 @@ enum BuiltinTargets {
             """),
         safety: .caution,
         method: .trash,
+        allowedRoots: { env in [env.url("Library/Developer/Xcode/iOS DeviceSupport")] },
         locate: { env in try env.childItems(of: env.url("Library/Developer/Xcode/iOS DeviceSupport")) }
     )
 
@@ -45,6 +47,13 @@ enum BuiltinTargets {
         safety: .caution,
         method: .trash,
         hideWhenEmpty: true,
+        allowedRoots: { env in
+            let xcode = env.url("Library/Developer/Xcode")
+            let folders = (try? FileManager.default.contentsOfDirectory(atPath: xcode.path)) ?? []
+            return folders.filter(isOtherDeviceSupportFolder).map {
+                xcode.appending(path: $0, directoryHint: .isDirectory)
+            }
+        },
         locate: { env in
             let xcode = env.url("Library/Developer/Xcode")
             let folders = (try? FileManager.default.contentsOfDirectory(atPath: xcode.path)) ?? []
@@ -65,6 +74,7 @@ enum BuiltinTargets {
             """),
         safety: .caution,
         method: .trash,
+        allowedRoots: { env in [env.url("Library/Developer/Xcode/Archives")] },
         locate: { env in try env.childItems(of: env.url("Library/Developer/Xcode/Archives")) }
     )
 
@@ -74,6 +84,7 @@ enum BuiltinTargets {
         explanation: String(localized: "Xcode가 쓰는 일반 캐시입니다. 지워도 안전하며 필요하면 다시 만들어집니다."),
         safety: .safe,
         method: .trash,
+        allowedRoots: { env in [env.url("Library/Caches/com.apple.dt.Xcode")] },
         locate: { env in try env.singleItem(at: env.url("Library/Caches/com.apple.dt.Xcode")) }
     )
 
@@ -85,6 +96,7 @@ enum BuiltinTargets {
             """),
         safety: .safe,
         method: .trash,
+        allowedRoots: { env in [env.url("Library/Caches/org.swift.swiftpm"), env.url("Library/org.swift.swiftpm")] },
         locate: { env in
             try env.singleItem(at: env.url("Library/Caches/org.swift.swiftpm"), name: "Caches/org.swift.swiftpm")
                 + env.singleItem(at: env.url("Library/org.swift.swiftpm"), name: "Library/org.swift.swiftpm")
@@ -122,6 +134,7 @@ enum BuiltinTargets {
         safety: .safe,
         method: .trash,
         hideWhenEmpty: true,
+        allowedRoots: { env in [env.url("Library/Caches/CocoaPods")] },
         locate: { env in try env.singleItem(at: env.url("Library/Caches/CocoaPods")) }
     )
 
@@ -134,6 +147,8 @@ enum BuiltinTargets {
         safety: .safe,
         method: .trash,
         hideWhenEmpty: true,
+        // 기본 위치만 허용한다. HOMEBREW_CACHE로 다른 곳을 쓰면 정리하지 않는다.
+        allowedRoots: { env in [env.url("Library/Caches/Homebrew")] },
         locate: { env in
             guard let brew = env.brewCandidates.first(where: {
                 FileManager.default.isExecutableFile(atPath: $0.path)

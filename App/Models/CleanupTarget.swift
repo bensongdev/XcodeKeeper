@@ -38,6 +38,8 @@ struct CleanupTarget: Identifiable, Sendable {
     let method: CleanupMethod
     /// 찾은 항목이 없으면 목록에서 숨긴다(있을 때만 표시하는 대상).
     var hideWhenEmpty = false
+    /// 휴지통으로 옮겨도 되는 위치(이 경로와 같거나 그 안). `PathGuard`가 정리 직전에 검증한다.
+    var allowedRoots: @Sendable (ScanEnvironment) -> [URL] = { _ in [] }
     let locate: @Sendable (ScanEnvironment) async throws -> [ScanItem]
 
     /// 선택할 수 있는 대상인가. 정보만 보여 주는 대상은 선택할 수 없다.

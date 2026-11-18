@@ -15,10 +15,10 @@ class UITestCase: XCTestCase {
 
     // MARK: - 도우미
 
-    func launch(openWindow: String?) {
+    func launch(openWindow: String?, extraArguments: [String] = []) {
         app = XCUIApplication()
         // 설정 기본값을 실행 인자 영역에서 고정해 사용자 설정의 영향을 받지 않게 한다.
-        app.launchArguments = ["-UITestMode", "YES", "-showFreeSpaceInMenuBar", "YES"]
+        app.launchArguments = ["-UITestMode", "YES", "-showFreeSpaceInMenuBar", "YES"] + extraArguments
         if let openWindow {
             app.launchArguments += ["-UITestOpenWindow", openWindow]
         }
@@ -54,5 +54,13 @@ class UITestCase: XCTestCase {
     /// 체크박스(Toggle) 값: 1 켬, 0 끔, 그 밖의 값은 혼합 상태.
     func checkboxValue(_ element: XCUIElement) -> Int? {
         element.value as? Int
+    }
+
+    func waitForDisappearance(_ element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while element.exists && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return !element.exists
     }
 }

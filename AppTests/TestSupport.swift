@@ -103,3 +103,39 @@ func loadFixture(_ name: String, file: StaticString = #filePath, line: UInt = #l
 func makeScanner(_ targets: [CleanupTarget]) -> JunkScanner {
     JunkScanner(targets: targets, environment: makeEnvironment(home: FileManager.default.temporaryDirectory))
 }
+
+/// 실제 휴지통 대신 테스트 임시 폴더로 옮기는 가짜 휴지통. 옮긴 경로를 기록한다.
+final class FakeTrash: Trashing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var moved: [URL] = []
+    let directory: URL
+    /// 이 이름의 항목은 이동에 실패한다.
+    var failingNames: Set<String> = []
+
+    init(directory: URL) {
+        self.directory = directory
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    var movedURLs: [URL] { lock.withLock { moved } }
+
+    func moveToTrash(_ url: URL) throws {
+        if failingNames.contains(url.lastPathComponent) {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+        try FileManager.default.moveItem(at: url, to: directory.appending(path: UUID().uuidString))
+        lock.withLock { moved.append(url) }
+    }
+}
+
+/// 테스트용 정리 서비스(가짜 휴지통·메모리 이력·고정 Xcode 상태).
+func makeCleanupServices(
+    cleaner: any Cleaning = Cleaner(
+        environment: makeEnvironment(home: FileManager.default.temporaryDirectory),
+        trash: FakeTrash(directory: FileManager.default.temporaryDirectory.appending(path: "unused-trash"))
+    ),
+    history: any HistoryStoring = InMemoryHistoryStore(),
+    xcodeRunning: Bool = false
+) -> CleanupServices {
+    CleanupServices(cleaner: cleaner, history: history, xcode: FixedXcodeChecker(isRunning: xcodeRunning))
+}

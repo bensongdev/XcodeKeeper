@@ -9,6 +9,9 @@ struct JunkListView: View {
         VStack(spacing: 0) {
             header
             Divider()
+            if case .finished(let outcome) = appState.cleanupPhase {
+                CleanupResultBanner(outcome: outcome)
+            }
             if appState.lastScanDate == nil && !appState.isScanning && !hasAnyResult {
                 ContentUnavailableView {
                     Label("아직 스캔하지 않았습니다", systemImage: "magnifyingglass")
@@ -28,6 +31,19 @@ struct JunkListView: View {
             Divider()
             bottomBar
         }
+        .sheet(isPresented: confirmationBinding) {
+            if case .confirming(let warning) = appState.cleanupPhase {
+                CleanupConfirmSheet(xcodeRunningWarning: warning)
+                    .environment(appState)
+            }
+        }
+    }
+
+    private var confirmationBinding: Binding<Bool> {
+        Binding(
+            get: { if case .confirming = appState.cleanupPhase { true } else { false } },
+            set: { if !$0 { appState.dismissCleanupConfirmation() } }
+        )
     }
 
     private var hasAnyResult: Bool {
@@ -50,22 +66,44 @@ struct JunkListView: View {
     }
 
     private var bottomBar: some View {
-        HStack {
+        let scanned = appState.lastScanDate != nil
+        return HStack {
             Text("선택 \(ByteFormat.gigabytes(appState.scanResults.selectedBytes))")
                 .font(.body.monospacedDigit().bold())
                 .accessibilityIdentifier("selection.total")
             Spacer()
-            if appState.isScanning {
+            if appState.isCleaning {
+                ProgressView().controlSize(.small)
+                Text("정리 중…")
+                    .accessibilityIdentifier("cleanup.progress")
+                Button("취소") { appState.cancelCleanup() }
+                    .accessibilityIdentifier("cleanup.cancel")
+            } else if appState.isScanning {
                 Button("취소") { appState.cancelScan() }
                     .accessibilityIdentifier("scan.cancel")
             }
-            Button(appState.lastScanDate == nil ? "스캔" : "다시 스캔") { appState.startScan() }
-                .keyboardShortcut(.defaultAction)
-                .disabled(appState.isScanning)
+            Button(scanned ? "다시 스캔" : "스캔") { appState.startScan() }
+                .modifier(DefaultActionIf(isOn: !scanned))
+                .disabled(appState.isScanning || appState.isCleaning)
                 .accessibilityIdentifier("scan.start")
+            if scanned {
+                Button("휴지통으로 정리") { appState.requestCleanup() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!appState.canStartCleanup)
+                    .accessibilityIdentifier("cleanup.start")
+            }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
+    }
+}
+
+/// 조건부 기본 버튼(Return 키). 스캔 전에는 "스캔", 스캔 후에는 "휴지통으로 정리"가 기본 버튼이다.
+private struct DefaultActionIf: ViewModifier {
+    let isOn: Bool
+
+    func body(content: Content) -> some View {
+        if isOn { content.keyboardShortcut(.defaultAction) } else { content }
     }
 }
 

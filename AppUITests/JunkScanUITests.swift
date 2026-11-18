@@ -89,12 +89,4 @@ final class JunkScanUITests: UITestCase {
         XCTAssertEqual(scanButton.label, "스캔", "완료되지 않았으므로 '다시 스캔'이 아님")
         capture(app.windows.firstMatch, "01-scan-cancelled")
     }
-
-    private func waitForDisappearance(_ element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while element.exists && Date() < deadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-        }
-        return !element.exists
-    }
 }
