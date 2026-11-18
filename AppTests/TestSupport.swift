@@ -1,0 +1,105 @@
+import Foundation
+import XCTest
+@testable import XcodeKeeper
+
+/// 테스트마다 만드는 임시 폴더. 실제 ~/Library는 건드리지 않는다.
+final class TemporaryDirectory {
+    let url: URL
+
+    init() throws {
+        url = FileManager.default.temporaryDirectory
+            .appending(path: "XcodeKeeperTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    }
+
+    deinit {
+        // 권한을 막아 둔 하위 폴더도 지울 수 있게 되돌린 뒤 삭제한다(테스트가 만든 임시 폴더만).
+        if let enumerator = FileManager.default.enumerator(atPath: url.path) {
+            for case let path as String in enumerator {
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: 0o755], ofItemAtPath: url.appending(path: path).path
+                )
+            }
+        }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// `relativePath` 위치에 `bytes` 크기의 파일을 만든다(중간 폴더 포함).
+    @discardableResult
+    func makeFile(_ relativePath: String, bytes: Int, modified: Date? = nil) throws -> URL {
+        let file = url.appending(path: relativePath)
+        try FileManager.default.createDirectory(
+            at: file.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try Data(repeating: 0x61, count: bytes).write(to: file)
+        if let modified {
+            try FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: file.path)
+        }
+        return file
+    }
+
+    @discardableResult
+    func makeDirectory(_ relativePath: String) throws -> URL {
+        let directory = url.appending(path: relativePath, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+}
+
+/// 외부 명령을 실행하지 않는 가짜 셸. 호출을 기록하고 정해진 결과를 돌려준다.
+final class FakeShell: ShellRunning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: [[String]] = []
+    private let handler: @Sendable (URL, [String]) throws -> ShellResult
+
+    init(handler: @escaping @Sendable (URL, [String]) throws -> ShellResult) {
+        self.handler = handler
+    }
+
+    convenience init(stdout: String, exitCode: Int32 = 0, stderr: String = "") {
+        self.init { _, _ in ShellResult(exitCode: exitCode, stdout: stdout, stderr: stderr) }
+    }
+
+    var calls: [[String]] { lock.withLock { recorded } }
+
+    func run(_ executable: URL, arguments: [String], timeout: TimeInterval) async throws -> ShellResult {
+        lock.withLock { recorded.append([executable.lastPathComponent] + arguments) }
+        return try handler(executable, arguments)
+    }
+}
+
+/// 테스트용 대상. 정해진 항목을 (지연 후) 돌려주거나 실패한다.
+func makeTarget(
+    _ id: String,
+    safety: Safety = .safe,
+    method: CleanupMethod = .trash,
+    hideWhenEmpty: Bool = false,
+    delay: Duration? = nil,
+    result: Result<[ScanItem], ScanFailure> = .success([])
+) -> CleanupTarget {
+    CleanupTarget(
+        id: id, title: id, explanation: "설명", safety: safety, method: method, hideWhenEmpty: hideWhenEmpty,
+        locate: { _ in
+            if let delay { try await Task.sleep(for: delay) }
+            return try result.get()
+        }
+    )
+}
+
+func makeItem(_ id: String, bytes: Int64) -> ScanItem {
+    ScanItem(url: URL(fileURLWithPath: "/tmp/\(id)"), name: id, bytes: bytes, lastModified: nil)
+}
+
+func makeEnvironment(home: URL, shell: any ShellRunning = FakeShell(stdout: "")) -> ScanEnvironment {
+    ScanEnvironment(home: home, sizes: SizeCalculator(), shell: shell)
+}
+
+func loadFixture(_ name: String, file: StaticString = #filePath, line: UInt = #line) throws -> String {
+    let bundle = Bundle(for: TemporaryDirectory.self)
+    let url = try XCTUnwrap(bundle.url(forResource: name, withExtension: "json"), file: file, line: line)
+    return try String(contentsOf: url, encoding: .utf8)
+}
+
+func makeScanner(_ targets: [CleanupTarget]) -> JunkScanner {
+    JunkScanner(targets: targets, environment: makeEnvironment(home: FileManager.default.temporaryDirectory))
+}

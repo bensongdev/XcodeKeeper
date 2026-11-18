@@ -24,6 +24,15 @@ private struct ScannerDetailView: View {
     let section: ScannerSection
 
     var body: some View {
+        switch section {
+        case .junk:
+            JunkListView()
+        case .simulators, .history:
+            placeholder
+        }
+    }
+
+    private var placeholder: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(section.title)
                 .font(.title2.bold())

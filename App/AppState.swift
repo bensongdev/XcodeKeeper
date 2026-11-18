@@ -31,17 +31,54 @@ enum ScannerSection: String, CaseIterable, Identifiable, Sendable {
 @Observable
 final class AppState {
     private let diskSpace: any DiskSpaceProviding
+    private let scanner: JunkScanner
+    private var scanTask: Task<Void, Never>?
 
     var selectedSection: ScannerSection? = .junk
     private(set) var availableBytes: Int64?
+    var scanResults: ScanResults
+    private(set) var lastScanDate: Date?
 
-    init(diskSpace: any DiskSpaceProviding) {
+    init(diskSpace: any DiskSpaceProviding, scanner: JunkScanner) {
         self.diskSpace = diskSpace
+        self.scanner = scanner
+        self.scanResults = ScanResults(targets: scanner.targets)
         refreshDiskSpace()
     }
 
+    var isScanning: Bool { scanTask != nil }
+
     func refreshDiskSpace() {
         availableBytes = diskSpace.availableBytes()
+    }
+
+    /// 스캔을 시작한다. 진행 중인 스캔이 있으면 취소하고 새로 시작한다.
+    func startScan() {
+        scanTask?.cancel()
+        scanResults.beginScan()
+        let stream = scanner.scan()
+        scanTask = Task { [weak self] in
+            for await event in stream {
+                // 취소된 이전 스캔의 늦은 이벤트가 새 결과를 덮지 않게 한다.
+                guard !Task.isCancelled else { break }
+                self?.scanResults.apply(event)
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.lastScanDate = Date()
+            self.scanTask = nil
+            self.refreshDiskSpace()
+        }
+    }
+
+    func cancelScan() {
+        scanTask?.cancel()
+        scanTask = nil
+        scanResults.markUnfinishedCancelled()
+    }
+
+    /// 스캔이 끝날 때까지 기다린다(테스트용).
+    func waitForScan() async {
+        await scanTask?.value
     }
 }
 
@@ -67,8 +104,15 @@ struct LaunchConfiguration: Sendable {
     @MainActor
     func makeAppState() -> AppState {
         if isUITest {
-            return AppState(diskSpace: FixedDiskSpaceProvider(bytes: Self.uiTestAvailableBytes))
+            // 실제 디스크나 명령을 건드리지 않는 가짜 대상을 쓴다.
+            return AppState(
+                diskSpace: FixedDiskSpaceProvider(bytes: Self.uiTestAvailableBytes),
+                scanner: JunkScanner(targets: UITestFixtures.targets, environment: UITestFixtures.environment)
+            )
         }
-        return AppState(diskSpace: VolumeDiskSpaceProvider())
+        return AppState(
+            diskSpace: VolumeDiskSpaceProvider(),
+            scanner: JunkScanner(targets: BuiltinTargets.all, environment: .live())
+        )
     }
 }

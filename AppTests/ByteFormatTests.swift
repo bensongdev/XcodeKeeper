@@ -20,3 +20,13 @@ final class ByteFormatTests: XCTestCase {
         XCTAssertEqual(ByteFormat.gigabytes(nil), "—")
     }
 }
+
+final class ByteFormatSizeTests: XCTestCase {
+    func testRowSizeUsesGBAboveOneGBAndMBBelow() {
+        XCTAssertEqual(ByteFormat.size(3_200_000_000), "3.2GB")
+        XCTAssertEqual(ByteFormat.size(1_000_000_000), "1.0GB")
+        XCTAssertEqual(ByteFormat.size(450_900_000), "450MB")
+        XCTAssertEqual(ByteFormat.size(1_000_000), "1MB")
+        XCTAssertEqual(ByteFormat.size(999_999), "1MB 미만")
+    }
+}

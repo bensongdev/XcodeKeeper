@@ -16,4 +16,11 @@ enum ByteFormat {
         let tenths = Int64((Double(bytes) / bytesPerGB * 10).rounded(.down))
         return "\(tenths / 10).\(tenths % 10)GB"
     }
+
+    /// 목록 행용 표기. 1GB 이상은 "3.2GB", 미만은 내림한 정수 MB("450MB"), 1MB 미만은 "1MB 미만".
+    static func size(_ bytes: Int64) -> String {
+        if Double(bytes) >= bytesPerGB { return gigabytes(bytes) }
+        let megabytes = bytes / 1_000_000
+        return megabytes >= 1 ? "\(megabytes)MB" : String(localized: "1MB 미만")
+    }
 }
