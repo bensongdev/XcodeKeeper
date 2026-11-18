@@ -26,7 +26,8 @@ final class AppStateCleanupTests: XCTestCase {
             scanner: JunkScanner(targets: targets, environment: environment),
             cleanup: makeCleanupServices(
                 cleaner: Cleaner(environment: environment, trash: trash), history: history, xcodeRunning: xcodeRunning
-            )
+            ),
+            simulators: FakeSimulators()
         )
     }
 

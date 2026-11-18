@@ -1,0 +1,40 @@
+{
+  "devices" : {
+    "com.apple.CoreSimulator.SimRuntime.iOS-27-0" : [
+      {
+        "dataPath" : "\/tmp\/fixture\/Devices\/1C9A210B-DB3E-403E-AC4F-1E7F9AA350D9\/data",
+        "dataPathSize" : 18337792,
+        "udid" : "1C9A210B-DB3E-403E-AC4F-1E7F9AA350D9",
+        "lastUsedAt" : "2026-11-09T06:33:20Z",
+        "isAvailable" : true,
+        "deviceTypeIdentifier" : "com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro",
+        "state" : "Shutdown",
+        "name" : "iPhone 18 Pro"
+      },
+      {
+        "udid" : "2C9A210B-DB3E-403E-AC4F-1E7F9AA350D9",
+        "isAvailable" : true,
+        "state" : "Booted",
+        "name" : "iPad Air 13"
+      }
+    ],
+    "com.apple.CoreSimulator.SimRuntime.iOS-26-5" : [
+      {
+        "udid" : "68EEEBAF-CAE2-4AD3-AB38-31634CAB8C4D",
+        "lastUsedAt" : "2026-11-09T02:32:27Z",
+        "isAvailable" : true,
+        "state" : "Shutdown",
+        "name" : "iPhone 17 Pro"
+      }
+    ],
+    "com.apple.CoreSimulator.SimRuntime.iOS-16-4" : [
+      {
+        "udid" : "AAAA1111-0000-0000-0000-000000000001",
+        "isAvailable" : false,
+        "availabilityError" : "runtime profile not found",
+        "state" : "Shutdown",
+        "name" : "iPhone 14"
+      }
+    ]
+  }
+}

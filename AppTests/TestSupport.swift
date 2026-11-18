@@ -139,3 +139,37 @@ func makeCleanupServices(
 ) -> CleanupServices {
     CleanupServices(cleaner: cleaner, history: history, xcode: FixedXcodeChecker(isRunning: xcodeRunning))
 }
+
+/// 실행 기록을 남기는 가짜 시뮬레이터 관리자.
+final class FakeSimulators: SimulatorManaging, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: [String] = []
+    var inventory = SimulatorInventory(runtimes: [], devices: [])
+    var loadError: SimctlError?
+    var deleteError: SimctlError?
+
+    var calls: [String] { lock.withLock { recorded } }
+
+    private func record(_ call: String) { lock.withLock { recorded.append(call) } }
+
+    func loadInventory() async throws -> SimulatorInventory {
+        record("load")
+        if let loadError { throw loadError }
+        return inventory
+    }
+
+    func deleteRuntime(_ identifier: String) async throws {
+        record("deleteRuntime \(identifier)")
+        if let deleteError { throw deleteError }
+    }
+
+    func deleteDevice(_ udid: String) async throws {
+        record("deleteDevice \(udid)")
+        if let deleteError { throw deleteError }
+    }
+
+    func deleteUnavailableDevices() async throws {
+        record("deleteUnavailable")
+        if let deleteError { throw deleteError }
+    }
+}

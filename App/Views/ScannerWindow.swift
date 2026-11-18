@@ -30,21 +30,7 @@ private struct ScannerDetailView: View {
         case .history:
             HistoryView()
         case .simulators:
-            placeholder
-        }
-    }
-
-    private var placeholder: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(section.title)
-                .font(.title2.bold())
-                .accessibilityIdentifier("detail.title")
-                .padding(20)
-            Divider()
-            ContentUnavailableView {
-                Label("아직 내용이 없습니다", systemImage: section.systemImage)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            SimulatorView()
         }
     }
 }

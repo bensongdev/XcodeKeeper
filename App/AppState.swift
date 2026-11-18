@@ -44,10 +44,22 @@ final class AppState {
     var cleanupPhase: CleanupPhase = .idle
     var history: [CleanupRecord]
 
-    init(diskSpace: any DiskSpaceProviding, scanner: JunkScanner, cleanup: CleanupServices) {
+    // 시뮬레이터 화면(AppState+Simulators.swift)
+    let simulatorManager: any SimulatorManaging
+    var simulatorState: SimulatorScreenState = .notLoaded
+    var simulatorConfirmation: SimulatorConfirmation?
+    var isSimulatorBusy = false
+    /// 마지막 삭제 명령의 실패 메시지(stderr 원문).
+    var simulatorError: String?
+
+    init(
+        diskSpace: any DiskSpaceProviding, scanner: JunkScanner, cleanup: CleanupServices,
+        simulators: any SimulatorManaging
+    ) {
         self.diskSpace = diskSpace
         self.scanner = scanner
         self.cleanup = cleanup
+        self.simulatorManager = simulators
         self.scanResults = ScanResults(targets: scanner.targets)
         self.history = cleanup.history.load()
         refreshDiskSpace()
@@ -98,6 +110,7 @@ struct LaunchConfiguration: Sendable {
 
     static let xcodeRunningKey = "UITestXcodeRunning"
     static let cleanupFailureKey = "UITestCleanupFailure"
+    static let simctlScenarioKey = "UITestSimctl"
 
     let isUITest: Bool
     /// UI 테스트에서 시작 시 열 창: "scanner" 또는 "settings".
@@ -106,6 +119,8 @@ struct LaunchConfiguration: Sendable {
     var simulatesXcodeRunning = false
     /// UI 테스트: 정리 중 일부 항목이 실패하게 한다.
     var simulatesCleanupFailure = false
+    /// UI 테스트: 가짜 simctl 상황("missing" 도구 없음, "deleteFails" 삭제 실패). nil이면 정상.
+    var simctlScenario: String?
 
     static func current(_ defaults: UserDefaults = .standard) -> LaunchConfiguration {
         let isUITest = defaults.bool(forKey: uiTestModeKey)
@@ -113,7 +128,8 @@ struct LaunchConfiguration: Sendable {
             isUITest: isUITest,
             windowToOpen: isUITest ? defaults.string(forKey: openWindowKey) : nil,
             simulatesXcodeRunning: isUITest && defaults.bool(forKey: xcodeRunningKey),
-            simulatesCleanupFailure: isUITest && defaults.bool(forKey: cleanupFailureKey)
+            simulatesCleanupFailure: isUITest && defaults.bool(forKey: cleanupFailureKey),
+            simctlScenario: isUITest ? defaults.string(forKey: simctlScenarioKey) : nil
         )
     }
 
@@ -128,7 +144,8 @@ struct LaunchConfiguration: Sendable {
                     cleaner: UITestFixtures.FakeCleaner(failsTargetID: simulatesCleanupFailure ? "homebrewCache" : nil),
                     history: InMemoryHistoryStore(),
                     xcode: FixedXcodeChecker(isRunning: simulatesXcodeRunning)
-                )
+                ),
+                simulators: UITestFixtures.FakeSimulatorManager(scenario: simctlScenario)
             )
         }
         let environment = ScanEnvironment.live()
@@ -139,7 +156,8 @@ struct LaunchConfiguration: Sendable {
                 cleaner: Cleaner(environment: environment, trash: SystemTrash()),
                 history: FileHistoryStore.live(),
                 xcode: SystemXcodeChecker()
-            )
+            ),
+            simulators: SimctlClient(shell: environment.shell, xcrunURL: environment.xcrunURL)
         )
     }
 }

@@ -11,7 +11,8 @@ final class AppStateTests: XCTestCase {
     func testAppStateReadsDiskSpaceOnInit() {
         let state = AppState(
             diskSpace: FixedDiskSpaceProvider(bytes: 16_200_000_000),
-            scanner: makeScanner([]), cleanup: makeCleanupServices()
+            scanner: makeScanner([]), cleanup: makeCleanupServices(),
+            simulators: FakeSimulators()
         )
         XCTAssertEqual(state.availableBytes, 16_200_000_000)
         XCTAssertEqual(state.selectedSection, .junk)
