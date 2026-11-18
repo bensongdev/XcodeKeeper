@@ -13,8 +13,8 @@
 ## 완료 정의 (Definition of Done)
 1. 구현 전에 기능의 수용 기준을 명확히 작성한다.
 2. 최소한의 변경으로 구현하고, 동작과 회귀를 검증하는 테스트를 포함한다.
-3. Xcode가 있는 macOS에서 `scripts/verify.sh all`을 실행한다. 실행할 수 없으면 명시적으로 NOT RUN으로 보고하고, 절대 PASS라고 주장하지 않는다.
-4. UI 변경 시 영향을 받는 상태를 UI 테스트로 실행하고, 이름을 붙인 창 스크린샷을 `.keepAlways`로 `.xcresult`에 첨부한다.
+3. Xcode가 있는 macOS에서 `scripts/verify.sh all`을 실행한다(린트·빌드·단위 테스트·화면 밖 스냅샷, 마우스·키보드를 쓰지 않음). 실행할 수 없으면 명시적으로 NOT RUN으로 보고하고, 절대 PASS라고 주장하지 않는다.
+4. 화면 상태의 증거는 스냅샷 테스트(`AppTests`, `SnapshotTestCase.snapshot`)로 남긴다: 상태를 만들어 assertion으로 확인한 뒤 `NN-상태-설명` 이름으로 찍는다. 실제 클릭 흐름은 UI 테스트(`AppUITests`)로 작성하되, 로컬 실행(`AI_UI_CONTROL=1 ./scripts/verify.sh full`)은 사용자의 마우스·키보드를 빼앗으므로 **사람이 허락한 경우에만** 한다. 허락이 없으면 UI 테스트는 `NOT RUN`으로 보고한다.
 5. 첨부물을 추출해 존재 여부뿐 아니라 이미지 자체를 확인한다. 에이전트가 이미지를 볼 수 없으면 HUMAN REVIEW REQUIRED로 표시한다.
 6. 최소한 초기 상태, 변경된 상태, 그리고 해당되는 경우 오류/빈 상태의 증거를 확보한다. 기존 UI를 수정할 때는 변경 전/후를 포함한다.
 7. 검증 보고서를 제공한다: 변경 사항, 실행한 명령, PASS/FAIL/SKIPPED, 증거 경로, 한계, 위험.
@@ -23,13 +23,17 @@
 
 ## 테스트 작성 규칙
 - 상태 변화는 먼저 assertion으로 검증하고, 그 다음 스크린샷을 남긴다.
+- 스냅샷은 UI 테스트와 같은 가짜 데이터(`LaunchConfiguration(isUITest: true, ...).makeAppState()`)로 만든다. 스냅샷 테스트에서 창을 화면에 띄우거나(`orderFront`, `makeKeyAndOrderFront`) 앱을 활성화하지 않는다. 분할 화면은 사이드바가 화면 밖에서 그려지지 않으므로 상세 뷰를 따로 찍는다.
+- 단위 테스트 호스트에서는 앱이 창과 메뉴바 아이콘 없이 실행된다(`AppEntry`, `XCTestConfigurationFilePath`). 이 분기를 지우지 않는다.
 - macOS SwiftUI `Text`의 문자열은 접근성 `value`로 읽는다(`label` 아님). `contains`가 아니라 정확히 일치하는지 비교한다.
-- 스크린샷 이름은 `NN-상태-설명` 형식으로 붙인다 (예: `01-initial-launch`, `03-after-increment`).
+- 스크린샷 이름은 `NN-상태-설명` 형식으로 붙인다 (예: `01-initial-launch`, `03-after-increment`). 이 형식이 아닌 첨부는 `verify.sh`가 자동 첨부로 보고 FAIL 처리한다.
+- UI 테스트의 디버그 출력은 창 단위(`app.windows.firstMatch.debugDescription`)로 한다. `app.debugDescription`은 메뉴 막대의 최근 항목과 사용자 이름까지 로그에 남긴다.
 - 검증 스크립트를 수정하면 통제된 실패(테스트 실패, 컴파일 오류 등)를 주입해 FAIL과 0이 아닌 종료 코드를 확인하고, 주입한 변경은 원상 복구한다.
 
 ## 실행 규칙
 - 명시적 허락 없이 DerivedData, 아카이브, `.artifacts/runs`의 실행 증거, 사용자 파일, 다른 프로젝트를 삭제하지 않는다. 정리할 때는 `scripts/prune-evidence.sh`로 목록과 크기를 보여 주고 승인을 받는다.
 - 8GB RAM / 256GB SSD 기기이므로 시뮬레이터/테스트 세션을 병렬로 실행하지 않는다. `.artifacts/verify.lock`은 실행 중인 검증이 없음을 확인하기 전에는 지우지 않는다.
+- `project.yml` 스킴의 녹화 차단 설정(`preferredScreenCaptureFormat: screenshots`, `captureScreenshotsAutomatically: false`, `systemAttachmentLifetime: keepNever`)을 지우지 않는다. 지우면 UI 테스트 실패 시 화면 전체가 녹화되어 증거에 남는다. 녹화가 남은 실행 폴더는 열어 보지 말고 승인을 받아 통째로 지운다.
 - `CODE_SIGNING_ALLOWED=NO`를 설정하지 않는다. Apple Silicon에서 UI 테스트 러너가 강제 종료된다. 로컬 ad-hoc 서명(`CODE_SIGN_IDENTITY = -`)을 유지한다.
 - 빌드 설정, 타깃, 스킴은 `project.yml`에서만 수정한다. `*.xcodeproj`는 생성물이며 Git에서 제외되고 다시 생성될 때 덮어써진다.
 - 앱 이름/Bundle ID 변경은 `scripts/rename-app.sh`로 하고, 타깃 이름 규칙(`<Name>`, `<Name>Tests`, `<Name>UITests`)을 유지한다.

@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
 # AI 에이전트와 사람이 함께 쓰는 검증 진입점. macOS 기본 /bin/bash 3.2와 호환되어야 한다.
 # 종료 코드: 0 = 실행한 검사 모두 통과, 1 = 검사 실패, 2 = 사용법/환경 오류.
+# 모드: all(기본) = 린트+빌드+단위 테스트+화면 밖 스냅샷. 마우스·키보드를 쓰지 않는다.
+#       full = all + 실제 클릭 UI 테스트, ui = UI 테스트만. 둘 다 마우스·키보드를 조작하므로
+#       AI_UI_CONTROL=1 또는 CI=true 일 때만 실행한다.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 MODE="${1:-all}"
-if [[ ! "$MODE" =~ ^(build|unit|ui|all)$ ]]; then echo "사용법: scripts/verify.sh [build|unit|ui|all]" >&2; exit 2; fi
+if [[ ! "$MODE" =~ ^(build|unit|ui|all|full)$ ]]; then echo "사용법: scripts/verify.sh [build|unit|ui|all|full]" >&2; exit 2; fi
+if [[ ("$MODE" == ui || "$MODE" == full) && "${AI_UI_CONTROL:-}" != 1 && "${CI:-}" != true ]]; then
+  echo "$MODE 모드는 UI 테스트가 마우스와 키보드를 조작합니다. 테스트 중에는 Mac을 쓸 수 없습니다." >&2
+  echo "사람이 허락한 경우에만 실행하세요: AI_UI_CONTROL=1 ./scripts/verify.sh $MODE" >&2
+  echo "평소 검사는 화면을 조작하지 않는 ./scripts/verify.sh all 을 쓰고, UI 테스트는 CI에서 확인합니다." >&2
+  exit 2
+fi
 if [[ "$(uname -s)" != "Darwin" ]]; then echo "이 스크립트는 Xcode가 설치된 macOS가 필요합니다" >&2; exit 2; fi
 if ! command -v xcodebuild >/dev/null; then echo "xcodebuild가 없습니다: 전체 Xcode를 설치하세요" >&2; exit 2; fi
 if [[ ! -f project.yml ]]; then echo "project.yml이 없습니다. 프로젝트 폴더에서 실행하세요" >&2; exit 2; fi
@@ -53,11 +62,11 @@ ACTION=test
 TEST_FILTER=""
 case "$MODE" in
   build) ACTION=build ;;
-  unit) TEST_FILTER="-only-testing:$UNIT_TARGET" ;;
+  unit|all) TEST_FILTER="-only-testing:$UNIT_TARGET" ;;
   ui) TEST_FILTER="-only-testing:$UI_TARGET" ;;
 esac
-# Xcode는 기본적으로 실패한 실행마다 약 190MB의 시스템 진단을 첨부한다. 실패 메시지, 스크린샷,
-# 실패 화면 녹화는 어느 쪽이든 남는다. 까다로운 실패를 조사할 때만
+# Xcode는 기본적으로 실패한 실행마다 약 190MB의 시스템 진단을 첨부한다. 실패 메시지와 스크린샷은 어느 쪽이든 남는다(
+# 화면 녹화는 project.yml 스킴에서 끈다). 까다로운 실패를 조사할 때만
 # AI_TEST_DIAGNOSTICS=on-failure 로 켠다.
 if [[ "$ACTION" == test ]]; then
   TEST_FILTER="$TEST_FILTER -collect-test-diagnostics ${AI_TEST_DIAGNOSTICS:-never}"
@@ -108,13 +117,17 @@ bundle_status() {
   else echo "PASS (통과 $pass)"; fi
 }
 UNIT="NOT RUN ($MODE 모드)"; UI="NOT RUN ($MODE 모드)"
-if [[ "$MODE" == unit || "$MODE" == all ]]; then UNIT="$(bundle_status "$UNIT_TARGET")"; fi
-if [[ "$MODE" == ui || "$MODE" == all ]]; then UI="$(bundle_status "$UI_TARGET")"; fi
+if [[ "$MODE" == all ]]; then UI="NOT RUN (all 모드는 화면을 조작하지 않음. CI 또는 AI_UI_CONTROL=1 ./scripts/verify.sh full)"; fi
+if [[ "$MODE" == unit || "$MODE" == all || "$MODE" == full ]]; then UNIT="$(bundle_status "$UNIT_TARGET")"; fi
+if [[ "$MODE" == ui || "$MODE" == full ]]; then UI="$(bundle_status "$UI_TARGET")"; fi
 case "$UNIT$UI" in *FAIL*) STATUS=1 ;; esac
 
 # 첨부물을 추출하고 스크린샷을 테스트별로 정리한다: screenshots/<테스트>/<첨부 이름>.png
+# 테스트가 이름 규칙(NN-상태-설명)으로 직접 붙인 PNG만 스크린샷으로 인정한다. 그 밖의 첨부(Xcode의 실패
+# 화면 녹화, 자동 스크린샷 등)는 화면 전체를 담아 개인 정보가 들어갈 수 있으므로 FAIL로 보고한다.
 EXPORT="NOT RUN (테스트를 실행하지 않음)"
 SHOTS=()
+STRAY=""; STRAY_COUNT=0
 if [[ "$ACTION" == test && -d "$RESULT" ]]; then
   ATT="$RUN/attachments"; mkdir -p "$ATT" "$RUN/screenshots"
   if xcrun xcresulttool export attachments --path "$RESULT" --output-path "$ATT" >"$RUN/export.log" 2>&1; then
@@ -125,19 +138,24 @@ if [[ "$ACTION" == test && -d "$RESULT" ]]; then
       a=0
       while FILE="$(plutil -extract "$t.attachments.$a.exportedFileName" raw -o - "$MANIFEST" 2>/dev/null)"; do
         NAME="$(plutil -extract "$t.attachments.$a.suggestedHumanReadableName" raw -o - "$MANIFEST")"
-        if [[ "$FILE" == *.png ]]; then
+        if [[ "$FILE" == *.png && "$NAME" =~ ^[0-9][0-9]-[^/]+$ ]]; then
           mkdir -p "$DIR"
           DEST="$DIR/$(printf '%s' "$NAME" | sed -E 's/_[0-9]+_[0-9A-F-]{36}//')"
           ln -f "$ATT/$FILE" "$DEST" 2>/dev/null || cp "$ATT/$FILE" "$DEST"
           SHOTS+=("${DEST#"$RUN"/}")
+        else
+          STRAY="${STRAY}- attachments/$FILE ($TEST_ID)"$'\n'; STRAY_COUNT=$((STRAY_COUNT + 1))
         fi
         a=$((a + 1))
       done
       t=$((t + 1))
     done
     EXPORT="EXPORTED (스크린샷 ${#SHOTS[@]}장)"
-    if [[ ("$MODE" == ui || "$MODE" == all) && ${#SHOTS[@]} -eq 0 ]]; then
-      EXPORT="FAIL (UI 테스트가 스크린샷을 남기지 않음)"; STATUS=1
+    if [[ $STRAY_COUNT -gt 0 ]]; then
+      EXPORT="FAIL (스크린샷 ${#SHOTS[@]}장, 이름 규칙 밖의 자동 첨부 ${STRAY_COUNT}개: 화면 녹화 등 개인 정보 포함 가능)"; STATUS=1
+    fi
+    if [[ "$MODE" != unit && ${#SHOTS[@]} -eq 0 ]]; then
+      EXPORT="FAIL (스냅샷/UI 테스트가 스크린샷을 남기지 않음)"; STATUS=1
     fi
   else
     EXPORT="FAIL (export.log 참고, xcresult를 Xcode에서 확인)"; STATUS=1
@@ -172,6 +190,14 @@ if [[ $STATUS -eq 0 ]]; then OVERALL=PASS; else OVERALL=FAIL; fi
         "$(plutil -extract "testFailures.$f.failureText" raw -o - "$RUN/test-summary.json")"
       f=$((f + 1))
     done
+  fi
+  if [[ $STRAY_COUNT -gt 0 ]]; then
+    echo
+    echo "## 자동 첨부 (FAIL)"
+    echo "Xcode가 자동으로 만든 첨부(실패 시 화면 녹화, 자동 스크린샷 등)이거나 이름 규칙(NN-상태-설명)을 따르지 않는 첨부입니다."
+    echo "화면 전체가 담겨 다른 앱의 개인 정보가 들어 있을 수 있습니다. results.xcresult 안에도 같은 내용이 있습니다."
+    echo "열어 보기 전에 project.yml 스킴의 녹화 설정을 확인하고, 이 실행 폴더는 사람의 승인을 받아 통째로 지우세요."
+    printf '%s' "$STRAY"
   fi
   if [[ ${#SHOTS[@]} -gt 0 ]]; then
     echo
