@@ -19,9 +19,9 @@ enum BuiltinTargets {
         method: .trash,
         allowedRoots: { env in [env.url("Library/Developer/Xcode/DerivedData")] },
         locate: { env in
-            try env.childItems(of: env.url("Library/Developer/Xcode/DerivedData")) {
+            disambiguatingDuplicateNames(try env.childItems(of: env.url("Library/Developer/Xcode/DerivedData")) {
                 projectName(fromDerivedDataFolder: $0.lastPathComponent)
-            }
+            })
         }
     )
 
@@ -183,6 +183,20 @@ enum BuiltinTargets {
         let hash = folder[folder.index(after: dash)...]
         let isHash = hash.count == 28 && hash.allSatisfy { $0.isASCII && $0.isLowercase }
         return isHash && dash > folder.startIndex ? String(folder[..<dash]) : folder
+    }
+
+    /// 해시 꼬리를 떼서 이름이 겹치는 항목(예: `Files-asvx…`, `Files-dmfh…` → 둘 다 `Files`)은
+    /// 해시 앞 6자를 붙여 구분한다: `Files (asvxng)`, `Files (dmfhyq)`. 겹치지 않는 이름은 그대로 둔다.
+    static func disambiguatingDuplicateNames(_ items: [ScanItem]) -> [ScanItem] {
+        let counts = Dictionary(items.map { ($0.name, 1) }, uniquingKeysWith: +)
+        return items.map { item in
+            guard counts[item.name, default: 0] > 1, let url = item.url else { return item }
+            let folder = url.lastPathComponent
+            let suffix = folder.split(separator: "-").last.map { String($0.prefix(6)) } ?? folder
+            return ScanItem(
+                url: url, name: "\(item.name) (\(suffix))", bytes: item.bytes, lastModified: item.lastModified
+            )
+        }
     }
 
     /// `watchOS DeviceSupport`, `tvOS DeviceSupport` 등. iOS는 별도 대상이라 제외한다.

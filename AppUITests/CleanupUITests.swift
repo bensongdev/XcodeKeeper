@@ -1,7 +1,7 @@
 import XCTest
 
 /// M2 정리 UI 테스트. 가짜 정리기(실제 휴지통·명령·이력 파일 사용 안 함)를 쓴다.
-/// 기본 선택(안전) 7개 = DerivedData 2 + Xcode 캐시 1 + SwiftPM 1 + 사용 불가 기기 2 + Homebrew 1, 합계 6.9GB
+/// 기본 선택(안전) 9개 = DerivedData 4 + Xcode 캐시 1 + SwiftPM 1 + 사용 불가 기기 2 + Homebrew 1, 합계 6.9GB
 final class CleanupUITests: UITestCase {
     private func element(_ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
@@ -35,7 +35,7 @@ final class CleanupUITests: UITestCase {
         // 확인 창
         openConfirmation()
         XCTAssertEqual(label("cleanup.confirm.title"), "선택한 항목을 정리할까요?")
-        XCTAssertEqual(label("cleanup.confirm.count"), "항목 7개")
+        XCTAssertEqual(label("cleanup.confirm.count"), "항목 9개")
         XCTAssertEqual(label("cleanup.confirm.bytes"), "예상 확보 용량 6.9GB")
         XCTAssertEqual(label("cleanup.confirm.commandNote"),
                        "사용 불가 시뮬레이터 기기는 휴지통을 거치지 않고 xcrun simctl delete unavailable로 바로 삭제됩니다.")
@@ -59,7 +59,7 @@ final class CleanupUITests: UITestCase {
         // 정리 이력
         element("sidebar.history").click()
         XCTAssertTrue(waitForText(app.staticTexts["history.total"], "누적 확보 6.9GB"))
-        XCTAssertEqual(label("history.row.0.count"), "항목 7개")
+        XCTAssertEqual(label("history.row.0.count"), "항목 9개")
         XCTAssertEqual(label("history.row.0.bytes"), "6.9GB")
         XCTAssertEqual(label("history.row.0.targets"),
                        "DerivedData, Xcode 캐시, SwiftPM 캐시, 사용 불가 시뮬레이터 기기, Homebrew 캐시")

@@ -200,4 +200,38 @@ final class BuiltinTargetsTests: XCTestCase {
         XCTAssertEqual(items.map(\.name), ["com.apple.TimeMachine.2026-11-18-090000.local"])
         XCTAssertNil(items.first?.url)
     }
+
+    // MARK: - 이름 겹침
+
+    func testDuplicateNamesGetHashPrefix() {
+        let items = [
+            ScanItem(url: URL(fileURLWithPath: "/dd/Files-asvxngujjlnzzwermfdcoeqnfejf"), name: "Files", bytes: 1,
+                     lastModified: nil),
+            ScanItem(url: URL(fileURLWithPath: "/dd/Files-dmfhyqcgphferkemkycgxnnkcuca"), name: "Files", bytes: 2,
+                     lastModified: nil),
+            ScanItem(url: URL(fileURLWithPath: "/dd/App-abcdefghijklmnopqrstuvwxyzab"), name: "App", bytes: 3,
+                     lastModified: nil)
+        ]
+        let result = BuiltinTargets.disambiguatingDuplicateNames(items)
+        XCTAssertEqual(result.map(\.name), ["Files (asvxng)", "Files (dmfhyq)", "App"])
+        XCTAssertEqual(result.map(\.bytes), [1, 2, 3], "용량과 경로는 그대로")
+        XCTAssertEqual(result.map(\.id), items.map(\.id))
+        XCTAssertEqual(Set(result.map(\.name)).count, 3, "표시 이름이 모두 달라야 함")
+    }
+
+    func testUniqueNamesAreUnchanged() {
+        let items = [makeItem("A", bytes: 1), makeItem("B", bytes: 2)]
+        XCTAssertEqual(BuiltinTargets.disambiguatingDuplicateNames(items), items)
+    }
+
+    func testDerivedDataInFakeHomeShowsDistinctNames() async throws {
+        let home = try TemporaryDirectory()
+        let derived = "Library/Developer/Xcode/DerivedData"
+        try home.makeFile("\(derived)/Files-asvxngujjlnzzwermfdcoeqnfejf/x", bytes: 1_000)
+        try home.makeFile("\(derived)/Files-dmfhyqcgphferkemkycgxnnkcuca/x", bytes: 1_000)
+        try home.makeFile("\(derived)/Solo-abcdefghijklmnopqrstuvwxyzab/x", bytes: 1_000)
+
+        let names = try await BuiltinTargets.derivedData.locate(makeEnvironment(home: home.url)).map(\.name)
+        XCTAssertEqual(Set(names), ["Files (asvxng)", "Files (dmfhyq)", "Solo"])
+    }
 }

@@ -54,6 +54,10 @@ final class JunkScanUITests: UITestCase {
         XCTAssertEqual(text(of: app.staticTexts["item.derivedData.XcodeKeeper.size"]), "3.2GB")
         XCTAssertEqual(text(of: app.staticTexts["item.derivedData.HelloMac.size"]), "1.1GB")
         XCTAssertLessThan(firstItem.frame.minY, app.staticTexts["item.derivedData.HelloMac"].frame.minY)
+        // 해시를 떼면 이름이 겹치는 두 폴더는 해시 앞 6자로 구분된다
+        XCTAssertTrue(app.staticTexts["item.derivedData.Files (asvxng)"].exists, "Files (asvxng) 행이 없습니다")
+        XCTAssertTrue(app.staticTexts["item.derivedData.Files (dmfhyq)"].exists, "Files (dmfhyq) 행이 없습니다")
+        XCTAssertEqual(text(of: app.staticTexts["item.derivedData.Files (asvxng)"]), "Files (asvxng)")
         capture(window, "03-scan-complete-default-selection")
 
         // 설명 팝오버

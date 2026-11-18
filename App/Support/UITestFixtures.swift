@@ -11,7 +11,9 @@ enum UITestFixtures {
     static let environment = ScanEnvironment(home: root, sizes: SizeCalculator(), shell: ShellRunner())
 
     static let targets: [CleanupTarget] = BuiltinTargets.all.map { target in
-        let items = fixtureItems[target.id] ?? []
+        // DerivedData는 실제 대상과 같은 이름 겹침 처리를 거친다.
+        let raw = fixtureItems[target.id] ?? []
+        let items = target.id == BuiltinTargets.derivedData.id ? BuiltinTargets.disambiguatingDuplicateNames(raw) : raw
         let delay = target.id == BuiltinTargets.archives.id ? slowTargetDelay : nil
         return CleanupTarget(
             id: target.id, title: target.title, explanation: target.explanation, safety: target.safety,
@@ -68,13 +70,17 @@ enum UITestFixtures {
         )
     }
 
-    /// 기본 선택 합계(안전): DerivedData 4.3 + Xcode 0.6 + SwiftPM 0.3 + 사용 불가 기기 1.5 + Homebrew 0.2 = 6.9GB
+    /// 기본 선택 합계(안전): DerivedData 4.3(+Files 2개 0.0002) + Xcode 0.6 + SwiftPM 0.3 + 사용 불가 기기 1.5
+    /// + Homebrew 0.2 = 6.9GB(소수 첫째 자리 내림). 기본 선택 항목 9개.
     static let expectedDefaultSelectedBytes: Int64 = 6_900_000_000
 
     private static let fixtureItems: [String: [ScanItem]] = [
         "derivedData": [
             item("DerivedData/XcodeKeeper-abc", "XcodeKeeper", 3_200_000_000, daysAgo: 0),
-            item("DerivedData/HelloMac-def", "HelloMac", 1_100_000_000, daysAgo: 12)
+            item("DerivedData/HelloMac-def", "HelloMac", 1_100_000_000, daysAgo: 12),
+            // 해시를 떼면 둘 다 "Files"가 되는 실제 사례
+            item("DerivedData/Files-asvxngujjlnzzwermfdcoeqnfejf", "Files", 104_000, daysAgo: 0),
+            item("DerivedData/Files-dmfhyqcgphferkemkycgxnnkcuca", "Files", 104_000, daysAgo: 0)
         ],
         "iOSDeviceSupport": [
             item("iOS DeviceSupport/iPhone15,2 18.1 (22B83)", "iPhone15,2 18.1 (22B83)", 2_800_000_000, daysAgo: 60)
