@@ -52,14 +52,33 @@ final class AppState {
     /// 마지막 삭제 명령의 실패 메시지(stderr 원문).
     var simulatorError: String?
 
+    // 모니터·알림·설정(AppState+Monitor.swift)
+    let settings: AppSettings
+    let monitor: MonitorServices
+    private(set) var totalBytes: Int64?
+    var memory: MemorySnapshot?
+    var topProcesses: [ProcessMemory] = []
+    var isPopoverVisible = false
+    var isScannerWindowVisible = false
+    /// 값이 바뀌면 메뉴바 라벨이 스캐너 창을 연다(AppKit 알림 처리기에서 창을 열기 위해).
+    var scannerWindowRequest = 0
+    var loginItemStatus: LoginItemStatus = .disabled
+    var loginItemError: String?
+    @ObservationIgnored var monitorTask: Task<Void, Never>?
+    /// 팝오버가 닫혀 있을 때 마지막으로 여유 공간을 읽은 시각.
+    @ObservationIgnored var lastDiskReadAt: Date?
+    @ObservationIgnored var backgroundScheduler: NSBackgroundActivityScheduler?
+
     init(
         diskSpace: any DiskSpaceProviding, scanner: JunkScanner, cleanup: CleanupServices,
-        simulators: any SimulatorManaging
+        simulators: any SimulatorManaging, monitor: MonitorServices = .fixed(), settings: AppSettings? = nil
     ) {
         self.diskSpace = diskSpace
         self.scanner = scanner
         self.cleanup = cleanup
         self.simulatorManager = simulators
+        self.monitor = monitor
+        self.settings = settings ?? .ephemeral()
         self.scanResults = ScanResults(targets: scanner.targets)
         self.history = cleanup.history.load()
         refreshDiskSpace()
@@ -69,6 +88,12 @@ final class AppState {
 
     func refreshDiskSpace() {
         availableBytes = diskSpace.availableBytes()
+        totalBytes = diskSpace.totalBytes()
+    }
+
+    /// 여유 공간을 읽기만 하고 상태에는 반영하지 않는다(모니터가 바뀐 경우에만 반영하려고).
+    func readAvailableBytes() -> Int64? {
+        diskSpace.availableBytes()
     }
 
     /// 스캔을 시작한다. 진행 중인 스캔이 있으면 취소하고 새로 시작한다.
@@ -111,6 +136,8 @@ struct LaunchConfiguration: Sendable {
     static let xcodeRunningKey = "UITestXcodeRunning"
     static let cleanupFailureKey = "UITestCleanupFailure"
     static let simctlScenarioKey = "UITestSimctl"
+    static let memoryScenarioKey = "UITestMemory"
+    static let alertClickKey = "UITestAlertClick"
 
     let isUITest: Bool
     /// UI 테스트에서 시작 시 열 창: "scanner" 또는 "settings".
@@ -121,6 +148,13 @@ struct LaunchConfiguration: Sendable {
     var simulatesCleanupFailure = false
     /// UI 테스트: 가짜 simctl 상황("missing" 도구 없음, "deleteFails" 삭제 실패). nil이면 정상.
     var simctlScenario: String?
+    /// UI 테스트: 가짜 메모리 상황("critical" 위험). nil이면 정상.
+    var memoryScenario: String?
+    /// UI 테스트: 시작 시 이 대상들(쉼표 구분)이 적힌 여유 공간 알림을 누른 것처럼 한다.
+    var alertClickTargetIDs: [String]?
+
+    /// 백그라운드 스캔·알림·로그인 항목 같은 실제 시스템 작업을 할지. UI 테스트에서는 하지 않는다.
+    var runsBackgroundWork: Bool { !isUITest }
 
     static func current(_ defaults: UserDefaults = .standard) -> LaunchConfiguration {
         let isUITest = defaults.bool(forKey: uiTestModeKey)
@@ -129,7 +163,10 @@ struct LaunchConfiguration: Sendable {
             windowToOpen: isUITest ? defaults.string(forKey: openWindowKey) : nil,
             simulatesXcodeRunning: isUITest && defaults.bool(forKey: xcodeRunningKey),
             simulatesCleanupFailure: isUITest && defaults.bool(forKey: cleanupFailureKey),
-            simctlScenario: isUITest ? defaults.string(forKey: simctlScenarioKey) : nil
+            simctlScenario: isUITest ? defaults.string(forKey: simctlScenarioKey) : nil,
+            memoryScenario: isUITest ? defaults.string(forKey: memoryScenarioKey) : nil,
+            alertClickTargetIDs: isUITest
+                ? defaults.string(forKey: alertClickKey)?.split(separator: ",").map(String.init) : nil
         )
     }
 
@@ -138,14 +175,18 @@ struct LaunchConfiguration: Sendable {
         if isUITest {
             // 실제 디스크·명령·휴지통·이력 파일을 건드리지 않는 가짜를 쓴다.
             return AppState(
-                diskSpace: FixedDiskSpaceProvider(bytes: Self.uiTestAvailableBytes),
+                diskSpace: FixedDiskSpaceProvider(
+                    bytes: Self.uiTestAvailableBytes, total: UITestFixtures.diskTotalBytes
+                ),
                 scanner: JunkScanner(targets: UITestFixtures.targets, environment: UITestFixtures.environment),
                 cleanup: CleanupServices(
                     cleaner: UITestFixtures.FakeCleaner(failsTargetID: simulatesCleanupFailure ? "homebrewCache" : nil),
                     history: InMemoryHistoryStore(),
                     xcode: FixedXcodeChecker(isRunning: simulatesXcodeRunning)
                 ),
-                simulators: UITestFixtures.FakeSimulatorManager(scenario: simctlScenario)
+                simulators: UITestFixtures.FakeSimulatorManager(scenario: simctlScenario),
+                monitor: UITestFixtures.monitorServices(memoryScenario: memoryScenario),
+                settings: .ephemeral()
             )
         }
         let environment = ScanEnvironment.live()
@@ -157,7 +198,9 @@ struct LaunchConfiguration: Sendable {
                 history: FileHistoryStore.live(),
                 xcode: SystemXcodeChecker()
             ),
-            simulators: SimctlClient(shell: environment.shell, xcrunURL: environment.xcrunURL)
+            simulators: SimctlClient(shell: environment.shell, xcrunURL: environment.xcrunURL),
+            monitor: .live(),
+            settings: AppSettings(defaults: .standard)
         )
     }
 }

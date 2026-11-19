@@ -30,7 +30,12 @@ final class XcodeKeeperUITests: UITestCase {
 
         let freeSpace = app.staticTexts["menu.freeSpace"]
         XCTAssertTrue(freeSpace.waitForExistence(timeout: 5), "팝오버가 열리지 않았습니다")
-        XCTAssertEqual(text(of: freeSpace), "여유 16.2GB")
+        XCTAssertEqual(text(of: freeSpace), "여유 16.2GB · 업데이트까지 약 14GB 부족")
+        XCTAssertEqual(text(of: app.staticTexts["menu.memory.pressure"]), "정상")
+        XCTAssertEqual(text(of: app.staticTexts["menu.memory.swap"]), "스왑 0.5GB")
+        XCTAssertEqual(text(of: app.staticTexts["menu.cleanable.empty"]), "아직 스캔하지 않았습니다")
+        XCTAssertTrue(app.staticTexts["menu.process.0.name"].waitForExistence(timeout: 7), "상위 프로세스가 없습니다")
+        XCTAssertEqual(text(of: app.staticTexts["menu.process.0.name"]), "Xcode")
         XCTAssertTrue(app.buttons["menu.openScanner"].exists)
         XCTAssertTrue(app.buttons["menu.quit"].exists)
         // MenuBarExtra(.window)의 팝오버는 접근성 트리에서 Dialog로 노출된다.

@@ -17,6 +17,9 @@ struct ScannerWindow: View {
             ScannerDetailView(section: appState.selectedSection ?? .junk)
         }
         .frame(minWidth: 720, minHeight: 520)
+        // 창이 열려 있으면 백그라운드 스캔이 사용자의 선택을 덮지 않도록 건너뛴다.
+        .onAppear { appState.isScannerWindowVisible = true }
+        .onDisappear { appState.isScannerWindowVisible = false }
     }
 }
 

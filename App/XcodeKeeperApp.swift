@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 enum WindowID {
     static let scanner = "scanner"
@@ -36,11 +37,18 @@ private final class TestHostDelegate: NSObject, NSApplicationDelegate {
 }
 
 struct XcodeKeeperApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     private let launch = LaunchConfiguration.current()
     @State private var appState: AppState
 
     init() {
-        _appState = State(initialValue: launch.makeAppState())
+        let state = launch.makeAppState()
+        _appState = State(initialValue: state)
+        if launch.runsBackgroundWork {
+            AlertClickRouter.shared.handler = { targetIDs in
+                Task { await state.handleAlertClick(targetIDs: targetIDs) }
+            }
+        }
     }
 
     var body: some Scene {
@@ -48,9 +56,10 @@ struct XcodeKeeperApp: App {
             MenuBarView()
                 .environment(appState)
         } label: {
+            // AppLifecycle도 AppState를 읽으므로 environment 안쪽에 둔다(바깥이면 실행 직후 크래시).
             MenuBarLabel()
+                .modifier(AppLifecycle(launch: launch))
                 .environment(appState)
-                .modifier(UITestWindowOpener(windowToOpen: launch.windowToOpen))
         }
         .menuBarExtraStyle(.window)
 
@@ -62,24 +71,87 @@ struct XcodeKeeperApp: App {
 
         Settings {
             SettingsView()
+                .environment(appState)
         }
     }
 }
 
-/// UI 테스트에서 시작 시 지정한 창을 연다. 메뉴바 아이콘은 실행 직후 항상 그려지므로 여기에 붙인다.
-private struct UITestWindowOpener: ViewModifier {
-    let windowToOpen: String?
+/// 알림 클릭을 앱 상태로 넘긴다. 앱이 알림 클릭으로 실행되면 처리기가 연결되기 전에 클릭이 올 수 있어 보관한다.
+@MainActor
+final class AlertClickRouter {
+    static let shared = AlertClickRouter()
+    private var pending: [String]?
+
+    var handler: (([String]) -> Void)? {
+        didSet {
+            if let pending, let handler {
+                self.pending = nil
+                handler(pending)
+            }
+        }
+    }
+
+    func deliver(_ targetIDs: [String]) {
+        if let handler { handler(targetIDs) } else { pending = targetIDs }
+    }
+}
+
+@MainActor
+private final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // 알림 클릭으로 실행될 때도 응답을 받으려면 실행이 끝나기 전에 위임자를 정한다.
+        guard LaunchConfiguration.current().runsBackgroundWork else { return }
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
+    ) async {
+        let targetIDs = response.notification.request.content.userInfo[UserNotifier.targetIDsKey] as? [String] ?? []
+        await MainActor.run { AlertClickRouter.shared.deliver(targetIDs) }
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
+    }
+}
+
+/// 실행 직후 할 일과 창 열기 요청 처리. 메뉴바 아이콘은 실행 직후 항상 그려지므로 여기에 붙인다.
+private struct AppLifecycle: ViewModifier {
+    let launch: LaunchConfiguration
+    @Environment(AppState.self) private var appState
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
     func body(content: Content) -> some View {
-        content.task {
-            switch windowToOpen {
-            case WindowID.scanner: openWindow(id: WindowID.scanner)
-            case "settings": openSettings()
-            default: return
+        content
+            .task {
+                appState.startMonitoring()
+                appState.refreshLoginItemStatus()
+                if launch.runsBackgroundWork { appState.startBackgroundScans() }
+                openUITestWindow()
+                if let targetIDs = launch.alertClickTargetIDs {
+                    await appState.handleAlertClick(targetIDs: targetIDs)
+                }
             }
-            NSApp.activate()
+            // AppKit 알림 처리기는 openWindow를 쓸 수 없으므로 앱 상태의 요청 번호로 연다.
+            // 라벨이 그려지기 전에 요청이 올 수 있어 initial로 처음 값도 확인한다.
+            .onChange(of: appState.scannerWindowRequest, initial: true) { _, request in
+                guard request > 0 else { return }
+                openWindow(id: WindowID.scanner)
+                NSApp.activate()
+            }
+    }
+
+    /// UI 테스트에서 시작 시 지정한 창을 연다.
+    private func openUITestWindow() {
+        switch launch.windowToOpen {
+        case WindowID.scanner: openWindow(id: WindowID.scanner)
+        case "settings": openSettings()
+        default: return
         }
+        NSApp.activate()
     }
 }
