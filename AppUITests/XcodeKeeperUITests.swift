@@ -76,6 +76,49 @@ final class XcodeKeeperUITests: UITestCase {
         XCTAssertTrue(popover.waitForExistence(timeout: 5), "설정 창을 연 뒤 팝오버가 다시 열리지 않았습니다")
     }
 
+    /// 스캐너 창과 설정 창이 모두 열려 있을 때 팝오버 버튼은 새 창을 만들지 않고 해당 창을 맨 앞으로 가져온다.
+    func testPopoverButtonsFocusAlreadyOpenWindow() {
+        launch(openWindow: "scanner")
+        XCTAssertTrue(app.staticTexts["detail.title"].waitForExistence(timeout: 10), "스캐너 창이 나타나지 않았습니다")
+        let statusItem = app.statusItems.firstMatch
+        let popover = app.dialogs.containing(.staticText, identifier: "menu.freeSpace").firstMatch
+        let scannerWindows = app.windows.containing(.staticText, identifier: "detail.title")
+        let settingsWindows = app.windows.containing(.switch, identifier: "settings.showFreeSpace")
+
+        // 설정 창을 열어 스캐너 창을 뒤로 보낸다.
+        statusItem.click()
+        XCTAssertTrue(popover.waitForExistence(timeout: 5), "팝오버가 열리지 않았습니다")
+        app.buttons["menu.settings"].click()
+        XCTAssertTrue(settingsWindows.firstMatch.waitForExistence(timeout: 5), "설정 창이 열리지 않았습니다")
+        XCTAssertTrue(waitForFrontWindow(containing: .switch, "settings.showFreeSpace"), "설정 창이 맨 앞이 아닙니다")
+
+        // 뒤에 있는 스캐너 창을 팝오버에서 다시 연다.
+        statusItem.click()
+        XCTAssertTrue(popover.waitForExistence(timeout: 5), "팝오버가 열리지 않았습니다")
+        app.buttons["menu.openScanner"].click()
+        XCTAssertTrue(waitForFrontWindow(containing: .staticText, "detail.title"), "스캐너 창이 맨 앞으로 오지 않았습니다")
+        XCTAssertEqual(scannerWindows.count, 1, "스캐너 창이 하나 더 생겼습니다")
+        capture(scannerWindows.firstMatch, "07-focus-scanner")
+
+        // 뒤로 간 설정 창을 팝오버에서 다시 연다.
+        statusItem.click()
+        XCTAssertTrue(popover.waitForExistence(timeout: 5), "팝오버가 열리지 않았습니다")
+        app.buttons["menu.settings"].click()
+        XCTAssertTrue(waitForFrontWindow(containing: .switch, "settings.showFreeSpace"), "설정 창이 맨 앞으로 오지 않았습니다")
+        XCTAssertEqual(settingsWindows.count, 1, "설정 창이 하나 더 생겼습니다")
+        capture(settingsWindows.firstMatch, "08-focus-settings")
+    }
+
+    /// `app.windows`는 앞에서 뒤 순서이므로 첫 창에 해당 요소가 있으면 그 창이 맨 앞이다.
+    private func waitForFrontWindow(containing type: XCUIElement.ElementType, _ identifier: String) -> Bool {
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if app.windows.firstMatch.descendants(matching: type)[identifier].exists { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        return false
+    }
+
     func testSettingsWindowShowsMenuBarToggle() {
         launch(openWindow: "settings")
 

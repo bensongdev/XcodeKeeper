@@ -141,7 +141,7 @@ private struct AppLifecycle: ViewModifier {
             .onChange(of: appState.scannerWindowRequest, initial: true) { _, request in
                 guard request > 0 else { return }
                 openWindow(id: WindowID.scanner)
-                NSApp.activate()
+                AppWindow.scanner.bringToFront()
             }
     }
 

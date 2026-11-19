@@ -65,7 +65,7 @@ struct MenuBarView: View {
             DiskSection()
             Divider()
             CleanableSection {
-                closePanelAndOpen { openWindow(id: WindowID.scanner) }
+                closePanelAndOpen(.scanner) { openWindow(id: WindowID.scanner) }
             }
             Divider()
             MemorySection()
@@ -74,7 +74,7 @@ struct MenuBarView: View {
             Divider()
             HStack {
                 Button("설정…") {
-                    closePanelAndOpen { openSettings() }
+                    closePanelAndOpen(.settings) { openSettings() }
                 }
                 .accessibilityIdentifier("menu.settings")
                 Spacer()
@@ -91,10 +91,36 @@ struct MenuBarView: View {
     }
 
     /// 같은 앱의 창이 앞에 와도 팝오버는 스스로 닫히지 않으므로 닫은 뒤 창을 연다.
-    private func closePanelAndOpen(_ open: () -> Void) {
+    private func closePanelAndOpen(_ window: AppWindow, _ open: () -> Void) {
         MenuBarPanel.close()
         open()
+        window.bringToFront()
+    }
+}
+
+/// 앱의 일반 창. 이미 열린 창을 다시 열면 SwiftUI는 새로 만들지 않지만 앞으로 가져오지도 않을 수 있어(다른 창 뒤, 최소화),
+/// 연 뒤 직접 찾아 키 창으로 만든다.
+enum AppWindow {
+    case scanner
+    case settings
+
+    /// SwiftUI가 붙이는 NSWindow 식별자: `Window(id:)`는 id(또는 "id-..."), Settings 장면은 이 이름.
+    func matches(_ identifier: String) -> Bool {
+        switch self {
+        case .scanner: identifier == WindowID.scanner || identifier.hasPrefix(WindowID.scanner + "-")
+        case .settings: identifier == "com_apple_SwiftUI_Settings_window"
+        }
+    }
+
+    @MainActor
+    func bringToFront() {
         NSApp.activate()
+        // 창이 막 만들어지는 경우를 위해 다음 실행 루프에서 찾는다.
+        DispatchQueue.main.async {
+            guard let window = NSApp.windows.first(where: { matches($0.identifier?.rawValue ?? "") }) else { return }
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 }
 

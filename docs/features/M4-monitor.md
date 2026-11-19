@@ -87,6 +87,12 @@ PRD 마일스톤 M4. 메모리·스왑 상태와 여유 공간을 메뉴바에�
 - [ ] 닫힌 뒤 메뉴바 아이콘을 한 번 누르면 팝오버가 다시 열린다(두 번 눌러야 하는 상태가 되지 않는다).
 - 테스트: UI 테스트 `testPopoverButtonsClosePopover`(CI, 로컬은 NOT RUN). 팝오버 닫힘·창 열림·재열림을 assertion으로 확인하고 `05-after-open-scanner`, `06-after-open-settings`를 찍는다.
 
+## 개선: 이미 열린 창을 팝오버에서 다시 열면 그 창으로 포커스 (2026-11-19, 사용자 요청)
+- [ ] 스캐너 창이나 설정 창이 이미 열려 있을 때(다른 창 뒤에 있거나 최소화된 경우 포함) 팝오버에서 해당 버튼을 누르면 그 창이 맨 앞의 키 창이 된다.
+- [ ] 같은 창이 새로 하나 더 생기지 않는다.
+- [ ] 알림을 눌러 스캐너 창을 열 때도 같은 방식으로 맨 앞에 온다.
+- 테스트: UI 테스트 `testPopoverButtonsFocusAlreadyOpenWindow`(CI, 로컬은 NOT RUN). 두 창을 모두 연 뒤 팝오버 버튼마다 맨 앞 창(`app.windows.firstMatch`)과 창 개수를 assertion으로 확인하고 `07-focus-scanner`, `08-focus-settings`를 찍는다.
+
 ## 검토 판정
 - [ ] 빌드와 테스트 PASS (`verification.md`의 전체 결과)
 - [ ] 스크린샷을 직접 열어 확인함
