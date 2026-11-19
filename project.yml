@@ -33,6 +33,8 @@ targets:
         # 메뉴바 앱: Dock 아이콘을 숨긴다.
         INFOPLIST_KEY_LSUIElement: YES
         SWIFT_EMIT_LOC_STRINGS: YES
+        # 앱 아이콘: App/Resources/Assets.xcassets/AppIcon (scripts/generate-app-icon.swift로 생성).
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # 배포 버전(CFBundleShortVersionString)과 빌드 번호(CFBundleVersion).
         MARKETING_VERSION: '1.0'
         CURRENT_PROJECT_VERSION: '1'
