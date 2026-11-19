@@ -4,7 +4,7 @@
 name: XcodeKeeper
 options:
   # 번들 ID는 <bundleIdPrefix>.<타깃이름> 으로 생성된다.
-  bundleIdPrefix: com.bensongdev.XcodeKeeper
+  bundleIdPrefix: com.bensongdev
   developmentLanguage: ko
   deploymentTarget:
     macOS: '14.0'

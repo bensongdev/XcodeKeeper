@@ -162,7 +162,9 @@ extension AppState {
     func startBackgroundScans() {
         guard backgroundScheduler == nil else { return }
         Task { await runBackgroundScan() }
-        let scheduler = NSBackgroundActivityScheduler(identifier: "com.bensongdev.XcodeKeeper.backgroundScan")
+        let scheduler = NSBackgroundActivityScheduler(
+            identifier: (Bundle.main.bundleIdentifier ?? "XcodeKeeper") + ".backgroundScan"
+        )
         scheduler.repeats = true
         scheduler.interval = Self.backgroundScanInterval
         scheduler.tolerance = Self.backgroundScanTolerance
