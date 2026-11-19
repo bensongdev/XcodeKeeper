@@ -34,8 +34,10 @@ final class XcodeKeeperUITests: UITestCase {
         XCTAssertEqual(text(of: app.staticTexts["menu.memory.pressure"]), "정상")
         XCTAssertEqual(text(of: app.staticTexts["menu.memory.swap"]), "스왑 0.5GB")
         XCTAssertEqual(text(of: app.staticTexts["menu.cleanable.empty"]), "아직 스캔하지 않았습니다")
-        XCTAssertTrue(app.staticTexts["menu.process.0.name"].waitForExistence(timeout: 7), "상위 프로세스가 없습니다")
-        XCTAssertEqual(text(of: app.staticTexts["menu.process.0.name"]), "Xcode")
+        // 프로세스 행은 버튼이라 이름과 용량이 버튼 라벨 하나로 합쳐진다.
+        let process = app.buttons["menu.process.0"]
+        XCTAssertTrue(process.waitForExistence(timeout: 7), "상위 프로세스가 없습니다")
+        XCTAssertEqual(process.label, "Xcode, 2.1GB")
         XCTAssertTrue(app.buttons["menu.openScanner"].exists)
         XCTAssertTrue(app.buttons["menu.quit"].exists)
         // MenuBarExtra(.window)의 팝오버는 접근성 트리에서 Dialog로 노출된다.

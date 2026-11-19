@@ -254,17 +254,17 @@ private struct ProcessSection: View {
                         Text(process.name)
                             .lineLimit(1)
                             .truncationMode(.middle)
-                            .accessibilityIdentifier("menu.process.\(index).name")
                         Spacer()
                         Text(ByteFormat.size(process.bytes))
                             .font(.body.monospacedDigit())
                             .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("menu.process.\(index).size")
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help(Text("활성 모니터 열기"))
+                // 버튼은 안의 Text들을 한 요소로 합치므로(라벨 "Xcode, 2.1GB") 식별자는 버튼에 단다.
+                .accessibilityIdentifier("menu.process.\(index)")
             }
         }
     }
