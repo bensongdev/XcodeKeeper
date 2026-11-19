@@ -59,8 +59,6 @@ struct MenuBarView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
-    /// 이 팝오버를 담은 패널. 다른 창을 열 때 닫는다(같은 앱의 창이 앞에 와도 패널은 스스로 닫히지 않는다).
-    @State private var panel = PanelReference()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -88,42 +86,38 @@ struct MenuBarView: View {
         }
         .padding(16)
         .frame(width: 320)
-        .background(WindowReader(reference: panel))
         .onAppear { appState.setPopoverVisible(true) }
         .onDisappear { appState.setPopoverVisible(false) }
     }
 
+    /// 같은 앱의 창이 앞에 와도 팝오버는 스스로 닫히지 않으므로 닫은 뒤 창을 연다.
     private func closePanelAndOpen(_ open: () -> Void) {
-        panel.window?.close()
+        MenuBarPanel.close()
         open()
         NSApp.activate()
     }
 }
 
-/// 뷰를 담은 NSWindow를 기억한다. 바뀌어도 다시 그릴 필요가 없으므로 관찰하지 않는 참조 객체에 둔다.
+/// MenuBarExtra 팝오버 닫기. 패널 창을 직접 닫으면 SwiftUI는 열려 있다고 여겨 다음에 아이콘을 두 번 눌러야 열린다.
+/// 그래서 메뉴바 아이콘 버튼을 눌러 SwiftUI가 스스로 닫게 한다(이 앱의 메뉴바 아이콘은 하나다).
 @MainActor
-final class PanelReference {
-    weak var window: NSWindow?
-}
-
-private struct WindowReader: NSViewRepresentable {
-    let reference: PanelReference
-
-    func makeNSView(context: Context) -> ReaderView {
-        let view = ReaderView()
-        view.reference = reference
-        return view
+enum MenuBarPanel {
+    static func close() {
+        for window in NSApp.windows where window.className == "NSStatusBarWindow" {
+            if let button = statusButton(in: window.contentView) {
+                button.performClick(nil)
+                return
+            }
+        }
     }
 
-    func updateNSView(_ nsView: ReaderView, context: Context) {}
-
-    final class ReaderView: NSView {
-        var reference: PanelReference?
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            if let window { reference?.window = window }
+    private static func statusButton(in view: NSView?) -> NSStatusBarButton? {
+        guard let view else { return nil }
+        if let button = view as? NSStatusBarButton { return button }
+        for subview in view.subviews {
+            if let button = statusButton(in: subview) { return button }
         }
+        return nil
     }
 }
 
