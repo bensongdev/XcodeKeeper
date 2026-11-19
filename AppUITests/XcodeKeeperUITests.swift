@@ -47,6 +47,35 @@ final class XcodeKeeperUITests: UITestCase {
         capture(popover, "03-menubar-popover")
     }
 
+    /// 팝오버의 "스캐너 열기"·"설정…"은 팝오버를 닫고 창을 연다. 닫힌 뒤 아이콘 한 번으로 다시 열린다.
+    func testPopoverButtonsClosePopover() {
+        launch(openWindow: nil)
+        let statusItem = app.statusItems.firstMatch
+        XCTAssertTrue(statusItem.waitForExistence(timeout: 10), "메뉴바 아이콘이 없습니다")
+        let popover = app.dialogs.containing(.staticText, identifier: "menu.freeSpace").firstMatch
+
+        statusItem.click()
+        XCTAssertTrue(popover.waitForExistence(timeout: 5), "팝오버가 열리지 않았습니다")
+        app.buttons["menu.openScanner"].click()
+        XCTAssertTrue(popover.waitForNonExistence(timeout: 5), "스캐너 열기 후에도 팝오버가 남아 있습니다")
+        let title = app.staticTexts["detail.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "스캐너 창이 열리지 않았습니다")
+        XCTAssertEqual(text(of: title), "개발 찌꺼기")
+        capture(app.windows.containing(.staticText, identifier: "detail.title").firstMatch, "05-after-open-scanner")
+
+        statusItem.click()
+        XCTAssertTrue(popover.waitForExistence(timeout: 5), "닫힌 뒤 아이콘을 한 번 눌러 팝오버가 다시 열리지 않았습니다")
+        app.buttons["menu.settings"].click()
+        XCTAssertTrue(popover.waitForNonExistence(timeout: 5), "설정 후에도 팝오버가 남아 있습니다")
+        let toggle = app.switches["settings.showFreeSpace"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5), "설정 창이 열리지 않았습니다")
+        let settingsWindow = app.windows.containing(.switch, identifier: "settings.showFreeSpace").firstMatch
+        capture(settingsWindow, "06-after-open-settings")
+
+        statusItem.click()
+        XCTAssertTrue(popover.waitForExistence(timeout: 5), "설정 창을 연 뒤 팝오버가 다시 열리지 않았습니다")
+    }
+
     func testSettingsWindowShowsMenuBarToggle() {
         launch(openWindow: "settings")
 

@@ -58,14 +58,16 @@ extension StatusLevel {
 struct MenuBarView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
+    /// 이 팝오버를 담은 패널. 다른 창을 열 때 닫는다(같은 앱의 창이 앞에 와도 패널은 스스로 닫히지 않는다).
+    @State private var panel = PanelReference()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             DiskSection()
             Divider()
             CleanableSection {
-                openWindow(id: WindowID.scanner)
-                NSApp.activate()
+                closePanelAndOpen { openWindow(id: WindowID.scanner) }
             }
             Divider()
             MemorySection()
@@ -73,8 +75,8 @@ struct MenuBarView: View {
             ProcessSection()
             Divider()
             HStack {
-                SettingsLink {
-                    Text("설정…")
+                Button("설정…") {
+                    closePanelAndOpen { openSettings() }
                 }
                 .accessibilityIdentifier("menu.settings")
                 Spacer()
@@ -86,8 +88,42 @@ struct MenuBarView: View {
         }
         .padding(16)
         .frame(width: 320)
+        .background(WindowReader(reference: panel))
         .onAppear { appState.setPopoverVisible(true) }
         .onDisappear { appState.setPopoverVisible(false) }
+    }
+
+    private func closePanelAndOpen(_ open: () -> Void) {
+        panel.window?.close()
+        open()
+        NSApp.activate()
+    }
+}
+
+/// 뷰를 담은 NSWindow를 기억한다. 바뀌어도 다시 그릴 필요가 없으므로 관찰하지 않는 참조 객체에 둔다.
+@MainActor
+final class PanelReference {
+    weak var window: NSWindow?
+}
+
+private struct WindowReader: NSViewRepresentable {
+    let reference: PanelReference
+
+    func makeNSView(context: Context) -> ReaderView {
+        let view = ReaderView()
+        view.reference = reference
+        return view
+    }
+
+    func updateNSView(_ nsView: ReaderView, context: Context) {}
+
+    final class ReaderView: NSView {
+        var reference: PanelReference?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window { reference?.window = window }
+        }
     }
 }
 
