@@ -77,7 +77,7 @@ report() {
     for s in "${STEPS[@]}"; do echo "$s"; done
     echo
     echo "## 파일"
-    echo "- verify.log (사전 검증), build.log, $APP_NAME.xcarchive (dSYM 포함), codesign.txt, notary-submit.json, notary-log.json, gatekeeper.txt"
+    echo "- verify.log (로컬 사전 검증), build.log, $APP_NAME.xcarchive (dSYM 포함), codesign.txt, notary-submit.json, notary-log.json, gatekeeper.txt"
     echo
     echo "## 사람 검토 체크리스트"
     echo "- [ ] 다른 Mac에서 배포 파일을 내려받아 실행해 봄 (첫 실행 시 '인터넷에서 다운로드한 앱' 확인창은 정상)"
@@ -88,13 +88,32 @@ report() {
 }
 fail() { step "$1" "FAIL ($2)"; report FAIL; exit 1; }
 
-# ① 사전 검증: 테스트를 통과하지 못한 코드는 배포하지 않는다. 배포는 사람이 직접 실행하는 작업이므로
-# 실제 클릭 UI 테스트까지 돌린다(full). 그동안 마우스·키보드를 쓰지 말라고 안내한다.
-echo "사전 검증(verify.sh full)을 시작합니다. UI 테스트가 끝날 때까지(수 분) 마우스와 키보드를 쓰지 마세요."
-if AI_UI_CONTROL=1 ./scripts/verify.sh full >"$OUT/verify.log" 2>&1; then
-  step "① 사전 검증 (verify.sh full)" "PASS ($(cat .artifacts/latest-run))"
+# ① 사전 검증: 테스트를 통과하지 못한 코드는 배포하지 않는다.
+#    실제 클릭 UI 테스트는 사용자의 마우스·키보드를 빼앗으므로 로컬에서 돌리지 않고, 배포할 커밋(HEAD)의
+#    GitHub CI(verify.sh full) 성공으로 대신한다. 그래서 작업 폴더가 깨끗하고 HEAD가 푸시되어 있어야 한다.
+#    로컬에서는 화면을 조작하지 않는 verify.sh all을 돌린다(③의 권한 비교에 쓰는 Debug 빌드도 여기서 만든다).
+CI_WORKFLOW="${CI_WORKFLOW:-verify.yml}"
+HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+if [[ -z "$HEAD_SHA" ]]; then fail "① 사전 검증 (CI)" "git 저장소가 아닙니다"; fi
+if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+  fail "① 사전 검증 (CI)" "커밋하지 않은 변경이 있습니다. 배포할 코드는 커밋·푸시하고 CI를 통과해야 합니다"
+fi
+if ! command -v gh >/dev/null; then fail "① 사전 검증 (CI)" "gh가 없어 CI 결과를 확인할 수 없습니다"; fi
+git fetch --quiet origin 2>/dev/null
+if [[ -z "$(git branch -r --contains "$HEAD_SHA" 2>/dev/null)" ]]; then
+  fail "① 사전 검증 (CI)" "HEAD(${HEAD_SHA:0:7})가 원격에 푸시되지 않았습니다"
+fi
+# 이 커밋의 가장 최근 CI 실행. 진행 중이면 기다리지 않고 실패로 처리한다.
+CI_RUN="$(gh run list --workflow "$CI_WORKFLOW" --commit "$HEAD_SHA" --limit 1 \
+  --json databaseId,status,conclusion --jq '.[0] | "\(.databaseId) \(.status) \(.conclusion)"' 2>/dev/null)"
+if [[ "$CI_RUN" != *" completed success" ]]; then
+  fail "① 사전 검증 (CI)" "HEAD(${HEAD_SHA:0:7})의 CI가 성공하지 않았습니다: ${CI_RUN:-실행 없음}"
+fi
+step "① 사전 검증 (CI)" "PASS (커밋 ${HEAD_SHA:0:7}, CI 실행 ${CI_RUN%% *}: verify.sh full)"
+if ./scripts/verify.sh all >"$OUT/verify.log" 2>&1; then
+  step "① 사전 검증 (로컬 verify.sh all)" "PASS ($(cat .artifacts/latest-run))"
 else
-  fail "① 사전 검증 (verify.sh full)" "verify.log 참고"
+  fail "① 사전 검증 (로컬 verify.sh all)" "verify.log 참고"
 fi
 
 # ② Release 아카이브 → Developer ID 내보내기. 내보내기 단계에서 Xcode가 배포용으로 다시 서명하며

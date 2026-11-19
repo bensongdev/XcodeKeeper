@@ -132,7 +132,7 @@ UI 기능을 추가할 때는 `AppUITests/<Name>UITests.swift`에서 화면 이�
 ./scripts/release.sh --sign-only   # 1~3단계만: Apple로 보내지 않고 서명까지 점검 (계정 정보 불필요)
 ./scripts/release.sh               # 전체: 서명 → 공증 → staple → 배포 검증
 ```
-1. `verify.sh all` 사전 검증 (실패하면 배포하지 않음)
+1. 사전 검증 (실패하면 배포하지 않음): 작업 폴더가 깨끗하고, HEAD가 푸시되어 있고, **그 커밋의 GitHub CI(`verify.sh full`, UI 테스트 포함)가 성공**했는지 확인한 뒤 로컬에서 `verify.sh all`을 돌립니다. 클릭 UI 테스트는 마우스·키보드를 빼앗으므로 로컬에서 돌리지 않습니다. `gh` 로그인이 필요합니다.
 2. Release 아카이브(`xcodebuild archive`) → Developer ID로 내보내기(`-exportArchive`, method `developer-id`). Xcode가 배포용으로 다시 서명하며 디버그 권한만 빼고 앱의 권한은 유지합니다.
 3. 서명 검사: 유효성, Developer ID, 타임스탬프, Hardened Runtime, 디버그 권한(`get-task-allow`) 없음, **개발 빌드에 있던 권한(예: App Sandbox)이 배포 빌드에서 빠지지 않았는지**
 4. Apple 공증 제출 후 결과 대기 (보통 수 분)
@@ -148,3 +148,7 @@ UI 기능을 추가할 때는 `AppUITests/<Name>UITests.swift`에서 화면 이�
 - 환경 변수: `NOTARY_PROFILE`(프로필 이름, 기본 `mac-native-ai-notary`), `SIGN_IDENTITY`(Developer ID 인증서가 여러 개일 때).
 - 검증 상태: 2026-11-18 예제 앱으로 `--sign-only`(1~3단계)를 실제 실행해 PASS를 확인했습니다. 4~7단계(공증, staple, Gatekeeper)는 첫 실제 배포 때 처음 실행되므로, 그 결과 보고서를 꼭 확인하세요.
 - 공증할 때마다 앱이 Apple로 전송되고 계정에 제출 기록이 남습니다. CI 자동 공증은 인증서와 계정 정보를 GitHub Secrets에 올려야 하므로 설정하지 않았습니다.
+
+## 라이선스
+
+MIT. [LICENSE](LICENSE)를 참고하세요.
